@@ -2,18 +2,23 @@ import argparse
 from datetime import date, timedelta, datetime
 from google.cloud import storage
 from config_params import stores
+from audit.file_audit import MuffatoFileAudit
+# Slack bot API
+from slack import WebClient
+from slack import RTMClient
+from slack.errors import SlackApiError
 
 
 def exceptions_list(dt: date, store_name: str):
-  dt = datetime.strptime(dt, "%Y-%m-%d")
-  if store_name.startswith('9_') and dt < datetime(2020, 11, 5):
-    return True
-  if store_name == '94_MAX-TITO-MUFFATO' and dt < datetime(2020, 8, 3):
-    return True
-  if store_name == '99_SJRP-DAHMA' and dt < datetime(2020, 10, 12):
-    return True
-  if store_name == '100_CATANDUVA' and dt < datetime(2020, 8, 21):
-    return True
+    dt = datetime.strptime(dt, "%Y-%m-%d")
+    if store_name.startswith('9_') and dt < datetime(2020, 11, 5):
+        return True
+    if store_name == '94_MAX-TITO-MUFFATO' and dt < datetime(2020, 8, 3):
+        return True
+    if store_name == '99_SJRP-DAHMA' and dt < datetime(2020, 10, 12):
+        return True
+    if store_name == '100_CATANDUVA' and dt < datetime(2020, 8, 21):
+        return True
 
 
 # Compara cada nome de arquivo com os da lista passada
@@ -58,8 +63,10 @@ def compara_quantidade(attributes: dict, tipo: str):
     contador3 = 0
     storage_client = storage.Client('mediar-painel')
     items1 = storage_client.list_blobs('mediar-ftp', prefix=f'muffato/{tipo}')
-    items2 = storage_client.list_blobs('mediar-data', prefix=f'muffato/sales-raw/{tipo}')
-    items3 = storage_client.list_blobs('mediar-data', prefix=f'muffato/transactions/')
+    items2 = storage_client.list_blobs(
+        'mediar-data', prefix=f'muffato/sales-raw/{tipo}')
+    items3 = storage_client.list_blobs(
+        'mediar-data', prefix=f'muffato/transactions/')
 
     for item in items1:
         if item.name.__contains__(f'{dt}'):
@@ -80,7 +87,7 @@ def compara_quantidade(attributes: dict, tipo: str):
 def daterange(start_date, end_date):
     start_date = datetime.strptime(start_date, '%Y-%m-%d')
     end_date = datetime.strptime(end_date, '%Y-%m-%d')
-    for n in range(int ((end_date - start_date).days)+1):
+    for n in range(int((end_date - start_date).days)+1):
         yield (start_date + timedelta(n)).strftime('%Y-%m-%d')
 
 
@@ -99,47 +106,53 @@ def is_int(x):
     except ValueError:
         return False
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--start_date')
-    parser.add_argument('--end_date')
-    parser.add_argument('--store_ids')
-    parser.add_argument('--sleeptime')
-    args = parser.parse_args()
-    if not is_date(args['start_date']):
-        if is_int(args['start_date']):
-            args['start_date'] = (datetime.now() + timedelta(int(args['start_date']))).strftime('%Y-%m-%d')
-        else:
-            raise ValueError('--start_date is not a date or int')
-    try:
-        if not is_date(args['end_date']):
-            if is_int(args['end_date']):
-                args['end_date'] = (datetime.now() + timedelta(int(args['end_date']))).strftime('%Y-%m-%d')
-            else:
-                raise ValueError('--end_date is not a date or int')
-        assert args['end_date'] >= args['start_date'], '--end_date is not >= --start_date'
-    except:
-        args['end_date'] = args['start_date']
+# if __name__ == '__main__':
+#     parser = argparse.ArgumentParser()
+#     parser.add_argument('--start_date')
+#     parser.add_argument('--end_date')
+#     parser.add_argument('--store_ids')
+#     parser.add_argument('--sleeptime')
+#     args = parser.parse_args()
+#     if not is_date(args['start_date']):
+#         if is_int(args['start_date']):
+#             args['start_date'] = (datetime.now() + timedelta(int(args['start_date']))).strftime('%Y-%m-%d')
+#         else:
+#             raise ValueError('--start_date is not a date or int')
+#     try:
+#         if not is_date(args['end_date']):
+#             if is_int(args['end_date']):
+#                 args['end_date'] = (datetime.now() + timedelta(int(args['end_date']))).strftime('%Y-%m-%d')
+#             else:
+#                 raise ValueError('--end_date is not a date or int')
+#         assert args['end_date'] >= args['start_date'], '--end_date is not >= --start_date'
+#     except:
+#         args['end_date'] = args['start_date']
 
-    for date in daterange(args['start_date'], args['end_date']):
-        attributes = {'date': date}
-        if args['topic'] == 'muffato-ftp':
-              verify(attributes['date'], 'mediar-ftp', 'muffato', filter='/SALES')
-              # verify(attributes['date'], 'mediar-ftp', 'muffato', filter='/ASSORTMENT')
-        elif args['topic'] == 'muffato-raw':
-              verify(attributes['date'], 'mediar-data', 'muffato', filter='/sales-raw/SALES')
-              # verify(attributes['date'], 'mediar-data', 'muffato', filter='/sales-raw/ASSORTMENT')
-        elif args['topic'] == 'muffato-transactions':
-              verify(attributes['date'], 'mediar-data', 'muffato', filter=f'/transactions/dt={attributes["date"]}')
-        elif args['topic'] == 'muffato-assortment':
-              verify(attributes['date'], 'mediar-data', 'muffato', filter=f'/assortment/dt={attributes["date"]}')
-        elif args['topic'] == 'sva-ftp':
-              verify(attributes['date'], 'mediar-ftp', 'sva')
-        elif args['topic'] == 'sva-raw':
-              verify(attributes['date'], 'mediar-data', 'sva', filter='/video-raw')
-        elif args['topic'] == 'sva-metrics':
-              verify(attributes['date'], 'mediar-data', 'sva', filter='/video-metrics')
-        elif args['topic'] == 'sva-filtered':
-              verify(attributes['date'], 'mediar-data', 'sva', filter='/video-filtered')
-        elif args['topic'] == 'muffato-compara':
-              compara_quantidade(attributes, 'SALES')
+#     for date in daterange(args['start_date'], args['end_date']):
+#         file_check = MuffatoFileAudit('mediar-data', date)
+#         file_check.exists('mediar-data', )
+#         #verify(date, 'mediar-ftp', 'muffato', filter='/ASSORTMENT')
+#         #verify(date, 'mediar-data', 'muffato', filter='/sales-raw/ASSORTMENT')
+#         #verify(date, 'mediar-ftp', 'muffato', filter='/SALES')
+#         #verify(date, 'mediar-data', 'muffato', filter='/sales-raw/SALES')
+#         #verify(date, 'mediar-data', 'muffato', filter=f'/transactions/dt={attributes["date"]}')
+#         #verify(date, 'mediar-data', 'muffato', filter=f'/assortment/dt={attributes["date"]}')
+#         #verify(date, 'mediar-ftp', 'sva')
+#         #verify(date, 'mediar-data', 'sva', filter='/video-raw')
+#         #verify(date, 'mediar-data', 'sva', filter='/video-metrics')
+#         #verify(date, 'mediar-data', 'sva', filter='/video-filtered')
+#         #compara_quantidade(attributes, 'SALES')
+
+with open('token.txt', mode='r') as file:
+    SLACK_BOT_TOKEN = file.read()
+
+try:
+    client = WebClient(token=SLACK_BOT_TOKEN)
+
+    response = client.chat_postMessage(
+        channel="C01QRT0EJE4",
+        text="Hello from your app! :tada:"
+    )
+except SlackApiError as e:
+    # You will get a SlackApiError if "ok" is False
+    assert e.response["error"]  # str like 'invalid_auth', 'channel_not_found'
