@@ -3,11 +3,8 @@ from datetime import date, timedelta, datetime
 from google.cloud import storage
 from config_params import stores
 from audit.file_audit import MuffatoFileAudit
-# Slack bot API
-from slack import WebClient
-from slack import RTMClient
-from slack.errors import SlackApiError
 
+import BenderBot
 
 def exceptions_list(dt: date, store_name: str):
     dt = datetime.strptime(dt, "%Y-%m-%d")
@@ -143,16 +140,6 @@ def is_int(x):
 #         #verify(date, 'mediar-data', 'sva', filter='/video-filtered')
 #         #compara_quantidade(attributes, 'SALES')
 
-with open('token.txt', mode='r') as file:
-    SLACK_BOT_TOKEN = file.read()
+bot = BenderBot.BenderBot()
 
-try:
-    client = WebClient(token=SLACK_BOT_TOKEN)
-
-    response = client.chat_postMessage(
-        channel="C01QRT0EJE4",
-        text="Hello from your app! :tada:"
-    )
-except SlackApiError as e:
-    # You will get a SlackApiError if "ok" is False
-    assert e.response["error"]  # str like 'invalid_auth', 'channel_not_found'
+bot.postMessageToChannel("All good.")
