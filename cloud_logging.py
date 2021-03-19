@@ -1,14 +1,15 @@
 from datetime import datetime, timedelta
 
 import google.cloud.logging
-
+import BenderBot
 
 class CloudLogging:
 
-    def __init__(self):
+    def __init__(self, bot : BenderBot.BenderBot):
         self.client = google.cloud.logging.Client()
         self.client.get_default_handler()
         self.client.setup_logging()
+        self.bot = bot
 
     def __get_store_id(self, date: str, execution_id: str):
         next_day = datetime.strptime(date, '%Y-%m-%d') + timedelta(days=1)
@@ -150,7 +151,8 @@ class CloudLogging:
 
 
 if __name__ == '__main__':
-    cloud_loggin = CloudLogging()
+    output_bot = BenderBot.BenderBot()
+    cloud_loggin = CloudLogging(output_bot)
     # not_found_entries = cloud_loggin.list_not_found_entries('2021-03-15')
     # print(f'Qtd de erros 404: {len(not_found_entries)}')
     # for entry in not_found_entries:
